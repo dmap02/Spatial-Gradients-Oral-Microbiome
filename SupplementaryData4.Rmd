@@ -1,0 +1,368 @@
+---
+title: "PCNM - using the quickPCNM function - Supplementary Data File 4" 
+author: "Diana Proctor"
+date: "November 10, 2017"
+output: html_document
+
+
+---
+
+This is the FOURTH script used to generate the main figures for the the manuscript titled "A spatial gradient of bacterial diversity in the human oral cavity shaped by salivary flow" 
+
+
+<WORK> This script and associated data are provided via (c) by Diana M Proctor, Julia A. Fukuyama, Susan P. Holmes. These data and the associated script are licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (CC-BY-CA).
+
+Given attribution, you are free to:
+1) Share, copy and redistribute the material in any medium or format
+2) Adapt, remix, transform, and build upon the material for any purpose, even commercially.
+
+To see the full license associated with attribution of this work, see the CC-By-CA license,  see <http://creativecommons.org/licenses/by-sa/4.0/>.
+
+
+### Import the data (from the m.s.)
+In this document, we perform the following spatial analysis on hellinger-transformed data:
+- trend surface analysis with forward selection of the polynomial terms
+- PCNM with selection of significant PCNM variables using a single distance threshold
+- MEM - testing of multiple distance thresholds and models and selection of the best model with AIC
+
+```{r, admin, fig.height=8.5, fig.width=11, warning=FALSE, message=FALSE}
+library("phyloseq");library("ggplot2");library(gridExtra);library("stringr");library("reshape2");library("genefilter"); library(knitr);library(DESeq2)
+setwd("~/Desktop/Proctor_NatureComm/")
+supra = readRDS("~/Dropbox/Figures_20170617/Revised/supra_v2.0.RDS")
+```
+
+
+### load the R scripts that were downloaded for the PCNM package from the sedar github
+
+```{r}
+setwd("~/Desktop/PCNM/sedar-master/pkg/PCNM/R/")
+for (f in list.files(pattern="*.R")) {
+    source(f)
+}
+```
+
+#### 1. Look at the map of the sample locations
+
+```{r, fig.width=6, fig.height=6, warning=FALSE} 
+library(RColorBrewer)
+myPalette = colorRampPalette(brewer.pal(11, "RdBu"), space="Lab")
+
+#create validation datset #2 for time x space analysis, all teeth, healthy subjects
+keep <- c("1-101", "1-102", "1-103", "1-104", "1-105", "1-106", "1-107")
+FullMouth <- subset_samples(supra, Subject %in% keep & Protocol=="Clinic")
+FullMouth <- prune_taxa(taxa_sums(FullMouth) > 0, FullMouth)
+FullMouth
+
+#filter the data
+filtergroup = filterfun(kOverA(k=200, A=1)) #k = number of samples; A = abundance
+        f1 = filter_taxa(FullMouth, filtergroup, prune=TRUE) 
+        f1 = prune_taxa(taxa_sums(f1) > 0, f1)
+        f1 = prune_samples(sample_sums(f1) > 0, f1)
+        f1
+
+otus = data.frame(otu_table(f1))
+library(vegan)
+otus.h = decostand(otus, "hellinger")
+#get the x,y coordinates        
+map <- data.frame(sample_data(f1))
+map$x = as.numeric(as.character(map$x))
+map$y = as.numeric(as.character(map$y))
+xygrid <- cbind(map$x, map$y)
+xygrid.c <- scale(xygrid, center=TRUE, scale=FALSE)
+#generate the plot of the sample locations using ggplot
+ggplot(map, aes(x, y, color=Tooth_Class, shape=Tooth_Aspect)) + geom_point() + theme_bw()
+```
+
+
+#PCNM
+#################################### PCNM ################################################
+
+### 1. do QuickPCNM
+
+
+```{r, fig.height=10, fig.width=12}
+setwd("~/Desktop/PCNM/raw/")
+#perform PCNM on the hellinger transformed data
+fm.PCNM.quick <- quickPCNM(otus.h, xygrid)
+summary(fm.PCNM.quick)
+fm.PCNM.quick[[2]] #eigenvalues
+fm.PCNM.quick[[3]] #results of forward selection
+fw.res= data.frame(fm.PCNM.quick[[3]])
+sig = fw.res$variables
+
+#test the axes for significance
+fm.PCNM.quick$RDA_axes_tests
+
+#subset on the sig variables and then plot
+sig.df= data.frame(fm.PCNM.quick$PCNM)
+sigdata <- sig.df[sig]
+head(sigdata)
+
+#what is the adjusted R2
+(R2adj.pcnm <- RsquareAdj(fm.PCNM.quick$RDA)$adj.r.squared)
+
+#project the fitted model
+df = data.frame(fm.PCNM.quick$RDA$CCA$u, sample_data(f1))
+df$x = as.numeric(as.character(df$x))
+df$y = as.numeric(as.character(df$y))
+
+p1 = ggplot(df, aes(x, y, color=RDA1)) +ggtitle("RDA1") + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.045, height = 0.045), size=2) + scale_color_gradientn(colours=myPalette(100)) + theme_bw() +theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))
+
+p2 = ggplot(df, aes(x, y, color=RDA2)) +ggtitle("RDA2") + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.045, height = 0.045), size=2) + scale_color_gradientn(colours=myPalette(100)) + theme_bw() +theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))
+
+
+p3 = ggplot(df, aes(x, y, color=RDA3)) +ggtitle("RDA3") + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.025, height = 0.025), size=2) + scale_color_gradientn(colours=myPalette(100)) + theme_bw()+theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))
+
+
+
+#
+df_axes = df
+
+
+#ggsave(grid.arrange(p1, p2,  p3, ncol=1), file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS8b.png", device="png",  width = 11, height = 8.5, units ="in",dpi = 300)
+```
+
+#plot the samples scores; the first 4 axes were significant so let's plot all of them
+```{r, fig.height=10, fig.width=12}
+df = fm.PCNM.quick$RDA$CCA$wa[,1:4]
+samples = data.frame(df, sample_data(f1))
+samples$x = as.numeric(as.character(samples$x))
+samples$y = as.numeric(as.character(samples$y))
+mi = subset(samples, Tooth_Class %in% c("Molar", "Incisor_Central"))
+
+buccal = subset(mi, Tooth_Aspect=="Buccal")
+#subset and plot the buccal
+p1= ggplot(buccal, aes(RDA1, RDA2, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p2= ggplot(buccal, aes(RDA1, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p3= ggplot(buccal, aes(RDA1, RDA4, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p4= ggplot(buccal, aes(RDA1, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p5= ggplot(buccal, aes(RDA2, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p6= ggplot(buccal, aes(RDA2, RDA4, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+#print to screen
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol=1)
+
+```
+
+#subset and plot the lingual
+```{r, fig.height=8, fig.width=12}
+lingual = subset(mi, Tooth_Aspect=="Lingual")
+
+p1= ggplot(lingual, aes(RDA1, RDA2, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p2= ggplot(lingual, aes(RDA1, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p3= ggplot(lingual, aes(RDA1, RDA4, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p4= ggplot(lingual, aes(RDA1, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p5= ggplot(lingual, aes(RDA2, RDA3, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+p6= ggplot(lingual, aes(RDA2, RDA4, color=Tooth_Class)) + geom_point()+theme(legend.position = "none") + facet_wrap(Jaw_Quadrant~Tooth_Aspect, ncol=4) + theme_bw()
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol=3)
+```
+
+
+
+#### 2. Plot the PCNM variables so that it's possible to see at which scale the variation appears to occur
+
+
+```{r, fig.height=8, fig.width=12}
+#get data into a frame for plotting
+sigdata2 = data.frame(sigdata, sample_data(f1))
+sigdata2$x = as.numeric(as.character(sigdata2$x))
+sigdata2$y = as.numeric(as.character(sigdata2$y))
+
+
+dfm = melt(sigdata2, id.vars = colnames(sample_data(f1)))
+p4 = ggplot(dfm, aes(x, y, color=value))  + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.045, height = 0.045), size=2) + scale_color_gradientn(colours=myPalette(100)) + theme_bw() + facet_wrap(~variable, scales="free")+ theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))
+
+
+#ggsave(p4, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS8b.png", device="png",  width = 11, height = 8.5, units ="in",dpi = 300)
+```
+
+#MEM
+########################################## MEM ########################################################
+- Note: the code here is from the Vignette: Stephane Dray, 2008. Moran's eigenvectors of spatial weighting of matrices in R.
+
+- The analysis above raises two questions related to the question or how a neighborhood should be defined since an arbitrary cutoff is used to define what is near and what is not. MEM offers a flexible way of solving this problem by allowing for construction of multiple models each differing in their definition of neighbor. Different model selection parameters can then be used to choose the model that explains the most variance
+
+
+##### Generate the neighbor graph
+```{r}
+map = data.frame(sample_data(f1))
+map <- map[order(map$Tooth_Number),] 
+
+nbear1 <- dnearneigh(xygrid, 0, 0.3)
+plot(nbear1, xygrid, col="red", pch=20, cex=2)
+
+#compute the euclidean distances between sites and select for neighbors
+dist_nbear1 <- nbdists(nbear1, xygrid)
+str(dist_nbear1)
+
+#define weights as a function of distance
+fdist <- lapply(dist_nbear1, function(x) 1-x/max(dist(xygrid)))
+
+#create the spatial weights
+listw_nbear1 = nb2listw(nbear1, glist=fdist, style="B")
+listw_nbear1
+```
+
+#### Select the spatial weighting matrix
+```{r}
+ #fau <- sqrt(otus/outer(apply(otus, 1, sum), rep(1, ncol(otus)), "*"))
+ #detrend
+ faudt <- resid(lm(as.matrix(otus.h) ~ as.matrix(xygrid)))
+library(spacemakeR)
+ sc.nbear1 = scores.listw(listw_nbear1)
+ AIC.nbear1 = ortho.AIC(faudt, sc.nbear1$vectors)
+ AIC.nbear1
+ 
+ #get the min AIC
+ min(AIC.nbear1, na.rm=TRUE)
+ which.min(AIC.nbear1)
+ 
+ #test.W takes 2 arguments (response matrix, object of class nb); it returns the best model
+ nbear1.res = test.W(faudt, nbear1)
+ names(nbear1.res)
+ names(nbear1.res$best)
+ 
+  
+ #estimate the best values of the parameters
+  f2 <- function(x, dmax, y) {
+     1 - (x^y)/(dmax)^y
+ }
+ maxi <- max(unlist(nbdists(nbear1, as.matrix(xygrid))))
+ 
+ tri.f2 <- test.W(faudt, nbear1, f = f2, y = 2:10, dmax = maxi,
+xy = xygrid)
+ 
+ names(tri.f2$best)
+ myspec = variogmultiv(faudt, xygrid, nclass=20)
+ myspec
+ 
+ plot(myspec$d, myspec$var, ty="b", pch=20, xlab="Distance", ylab=("C(distance"))
+```
+
+
+#### #construct 20 neighborhood matrices with a distance criterion varuying along the sequence of 20 evenly distributed values between 0.2 and 2; then use this to pick the threshold of the best model for comparison with the PCNM and the trend surface analysis
+```{r}
+
+#create 20 different models at differing thresholds
+dxy = seq(give.thresh(dist(xygrid)), 5, le=20)
+nbdnnlist <- lapply(dxy, dnearneigh, x = xygrid, d1 = 0)
+
+#test the best model across this list of 20 different models
+dmn.bin = lapply(nbdnnlist, test.W, Y=faudt)
+length(dmn.bin)
+
+#for each nb we can find the lowest AIC
+minAIC = sapply(dmn.bin, function(x) min(x$best$AICc, na.rm = T))
+which.min(minAIC)
+dxy[which.min(minAIC)]
+
+
+```
+
+#### Extract the best model
+```{r, fig.height=9, fig.width=12}
+MEM.champ = unlist(dmn.bin[which.min(minAIC)], recursive = FALSE)
+summary(MEM.champ)
+
+MEM.champ$best$values #eigenvalues
+MEM.champ$best$ord #MEM variables by order of R2
+
+#MEM variables selected in the best model
+mem_ID = MEM.champ$best$ord[1:which.min(MEM.champ$best$AICc)]
+length(mem_ID)
+sort(mem_ID)
+MEM.all <- MEM.champ$best$vectors
+MEM.select <- MEM.champ$best$vectors[,sort(c(mem_ID))]
+colnames(MEM.select) <- sort(mem_ID)
+
+#unadjusted of the best model
+R2.membest = MEM.champ$best$R2[which.min(MEM.champ$best$AICc)]
+
+#adjusted of the best model
+RsquareAdj(R2.membest, nrow(otus.h), length(mem_ID))
+
+
+df = data.frame(MEM.select, sample_data(f1))
+df$x = as.numeric(as.character(df$x))
+df$y = as.numeric(as.character(df$y))
+dfm = melt(df, id.vars = colnames(sample_data(f1)))
+
+p1 = ggplot(dfm, aes(x, y, color=value)) + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.025, height = 0.025), size=3) + scale_color_gradientn(colours=myPalette(100)) + theme_bw() + facet_wrap(~variable)+ theme(text = element_text(size=14), axis.text.x = element_text(angle=90, vjust=1)) 
+p1
+
+#ggsave(p1, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS9b.png",  width = 8.5, height = 11, units ="in",dpi = 300, device="png")
+```
+
+
+#### Let's do an RDA using the 10 retained MEM variables
+```{r, fig.height=9, fig.width=12}
+library(vegan)
+fm.mem.rda = rda(otus.h~., as.data.frame(MEM.select))
+fm.MEM.r2a = RsquareAdj(fm.mem.rda)$adj.r.squared
+fm.MEM.r2a
+
+anova.cca(fm.mem.rda)
+#how many axes are significant
+axes.mem.test = anova.cca(fm.mem.rda, by="axis")
+axes.mem.test
+
+#how many terms are significant
+terms.mem.test = anova.cca(fm.mem.rda, by="terms")
+terms.mem.test
+
+nb.axes = length(which(axes.mem.test[,4] <=0.05))
+#get the fitted model
+axes = data.frame(fm.mem.rda$CCA$u[,1:7], sample_data(f1))
+
+
+
+#plot with ggplot
+dfm = melt(axes, id.var=colnames(sample_data(f1)))
+dfm$x = as.numeric(as.character(dfm$x))
+dfm$y = as.numeric(as.character(dfm$y))
+
+
+dfm = subset(dfm, variable %in% c("RDA1", "RDA2", "RDA3"))
+
+#plot the fitted model
+p1 = ggplot(dfm, aes(x, y, color=value)) + geom_point(aes(x=x, y=y)) + coord_fixed() +scale_x_continuous(limits=c(-1,1)) + geom_jitter(position=position_jitter(width=0.025, height = 0.025), size=3) + scale_color_gradientn(colours=myPalette(100)) + theme_bw() + facet_wrap(~variable, ncol=1)+ theme(text = element_text(size=14), axis.text.x = element_text(angle=0, vjust=1)) 
+p1
+
+#ggsave(p1, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS9a.png",  width = 8.5, height = 11, units ="in",dpi = 300, device="png")
+```
+
+
+#plot the sample scores  as a function of tooth class
+```{r, fig.width=12, fig.height=10}
+axes = data.frame(fm.mem.rda$CCA$wa[,1:5], sample_data(f1))
+dfm = melt(axes, id.var=colnames(sample_data(f1)))
+dfm$x = as.numeric(as.character(dfm$x))
+dfm$y = as.numeric(as.character(dfm$y))
+
+
+buccal = subset(dfm, Tooth_Aspect=="Buccal")
+lingual = subset(dfm, Tooth_Aspect=="Lingual")
+ordering = 1:32
+buccal$interval <- factor(buccal$Tooth_Number, as.character(ordering))
+lingual$interval <- factor(lingual$Tooth_Number, as.character(ordering))
+     
+p1 = ggplot(buccal, aes(as.numeric(Tooth_Number), value)) + geom_smooth()+ facet_wrap(~variable, ncol=7, scales="free") + ggtitle("Buccal")
+p2 = ggplot(lingual, aes(as.numeric(Tooth_Number), value)) + geom_smooth()+ facet_wrap(~variable, ncol=7, scales="free")+ ggtitle("Lingual")
+
+grid.arrange(p1, p2, ncol=1)
+```
+
+
+
+

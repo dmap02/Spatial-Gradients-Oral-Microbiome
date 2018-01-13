@@ -1,0 +1,329 @@
+---
+title: "HiSeq Supragingival Plaque Biogeography - Script 1, decontamination"
+author: "Diana Proctor"
+date: "December 16, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Nature Communications Supplementary Data File 1 - 
+
+This is the FIRST script used to generate the main figures for the the manuscript by Proctor et al. titled "A spatial gradient of bacterial diversity in the human oral cavity shaped by salivary flow" 
+
+
+<WORK> This script and associated data are provided via (c) by Diana M Proctor, Julia A. Fukuyama, Susan P. Holmes, David A. Relman. These data and the associated script are licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (CC-BY-CA).
+
+
+Given attribution, you are free to:
+1) Share, copy and redistribute the material in any medium or format
+2) Adapt, remix, transform, and build upon the material for any purpose, even commercially.
+
+To see the full license associated with attribution of this work, see the CC-By-CA license,  see <http://creativecommons.org/licenses/by-sa/4.0/>.
+
+
+The local filename is: Proctor_Contaminants_v5.0.Rmd.
+
+###Create data subsets by getting rid of the data that won’t be analyzed. This study pertains to supragingival plaque and associated controls, not studies of subgingival plaque, saliva, OM, or those studies belonging to Elies or Fiona.
+```{r}
+library("phyloseq");library("ggplot2");library(gridExtra);library(reshape2);library(doBy);library(dada2)
+
+setwd("~/Desktop/Proctor_NatureComm/")
+load("~/Desktop/Proctor_NatureComm/Hyposalivation15_phys_v1.0.Rdata") #this is hypo15 from dada2; v2 corrected map file
+
+
+#Get rid of Elies, Fiona and the QC samples as well as the subgingival/om ones
+keep = c("Amplification", "Clinic", "Computational", "Extraction", "Home")
+
+unfiltered <- subset_samples(hypo15_subset, Protocol %in% keep) 
+unfiltered <- subset_samples(unfiltered, Aim !="QC") #get rid of the QC project samples
+unfiltered <- subset_samples(unfiltered, Habitat_Class !="Sub") #delete subgingival 
+unfiltered <- subset_samples(unfiltered, Habitat_Class !="Saliva") #delete saliva 
+unfiltered <- subset_samples(unfiltered, Habitat_Class != "OM") #delete OM 
+unfiltered <- subset_samples(unfiltered, Habitat_Class !="Unknown") #delete unlabeled sample
+unfiltered <- subset_samples(unfiltered, PoolName !="SA1_Hypo0001") #all OM samples 
+unfiltered <- prune_taxa(taxa_sums(unfiltered) >0, unfiltered) 
+unfiltered <- prune_samples(sample_sums(unfiltered) > 0, unfiltered) 
+unfiltered #28603 taxa, 7446 samples
+
+controls = c("Computational", "Instrument", "Reagent")
+sample_data(unfiltered)$Controls=ifelse(sample_data(unfiltered)$Habitat_Class %in% controls, "Control", "Sample")
+```
+
+#Center on the controls in order to identify taxa that should be removed; if a taxon has a negative value after centering it’s more abundant in the control than it is in the sample and should be removed.
+
+```{r}
+runs <- levels(sample_data(unfiltered)$PoolName) 
+holder <-vector('list',length(runs)) 
+
+for(i in 1:length(runs)){ 
+        Filt1 = subset_samples(unfiltered, PoolName==runs[[i]])
+        #create a technical dataset & calculate technical taxa means 
+        technical <- subset_samples(Filt1, Aim =="Technical") 
+        tech.means = colMeans(otu_table(technical)) 
+        #create a sample dataest & center on technical taxa means 
+        samples <- subset_samples(Filt1, Aim != "Technical") 
+        otus = otu_table(samples) 
+        centered= scale(otus, center = tech.means, scale = FALSE) 
+        otu_table(samples) = otu_table(centered, taxa_are_rows = FALSE) 
+        holder[[i]] <- samples 
+        }
+centered = merge_phyloseq(holder[[1]], holder[[2]], holder[[3]], holder[[4]], holder[[5]], holder[[6]], holder[[7]], holder[[8]], holder[[9]], holder[[10]], holder[[11]], holder[[12]], holder[[13]],  holder[[14]])
+centered #28603 taxa and 7005 samples
+
+
+#subset on taxa that are present > 0
+G0 = prune_taxa(taxa_sums(centered) > 0, centered) 
+G0 = prune_samples(sample_sums(G0) > 0, G0) 
+G0 #23116 taxa and 6927 samples
+
+#subset on taxa that are present < 0
+L0 = prune_taxa(taxa_sums(centered) < 0, centered) 
+L0 = prune_samples(sample_sums(L0) > 0, L0) 
+L0 #5487 taxa and 243 samples 
+rm(hypo15_subset)
+
+```
+
+```{r}
+library("phyloseq");library("ggplot2");library(gridExtra);library(reshape2);library(doBy)
+runs <- levels(sample_data(unfiltered)$PoolName)
+df.holder <- vector('list', length(runs))
+
+for(i in 1:length(runs)){
+        Filt1 = subset_samples(unfiltered, PoolName==runs[[i]])               
+        #create  a technical dataset &  calculate technical taxa means
+        technical <- subset_samples(Filt1, Aim =="Technical") #3985 taxa; 461 samples 
+        technical <- prune_taxa(taxa_sums(technical) > 0, technical)
+        technical <- prune_samples(sample_sums(technical) > 0, technical)
+        #create a sample dataest & center on technical taxa means
+        samples <- subset_samples(Filt1, Aim != "Technical") #7953 taxa are present
+        samples <- prune_taxa(taxa_sums(samples) > 0, samples)
+        samples <- prune_samples(sample_sums(samples) > 0, samples)
+
+#### Plot k (prevalence) over A (abundance)
+        
+tech <- data.frame(taxa_sums(technical), rownames(tax_table(technical)), tax_table(technical), t(otu_table(technical)))
+        colnames(tech)[1:2] <- c("taxa_sums", "sequences")
+        #rank order
+        tech <- tech[order(tech$taxa_sums, decreasing=TRUE),]
+        tech$rank <- 1:ntaxa(technical)
+        tech.dfm <- melt(tech, id.var=c("sequences", "rank", 
+        colnames(tax_table(technical))))
+        tech.dfm$binary <- ifelse(tech.dfm$value > 0, "1", "0")
+        tech.dfm$binary <- as.numeric(as.character(tech.dfm$binary))
+        
+samp <- data.frame(taxa_sums(samples), rownames(tax_table(samples)), tax_table(samples), t(otu_table(samples)))
+        colnames(samp)[1:2] <- c("taxa_sums", "sequences")
+        #rank order
+        samp <- samp[order(samp$taxa_sums, decreasing=TRUE),]
+        samp$rank <- 1:ntaxa(samples)
+        samp.dfm <- melt(samp, id.var=c("sequences", "rank", 
+        colnames(tax_table(samples))))
+        samp.dfm$binary <- ifelse(samp.dfm$value > 0, "1", "0")
+        samp.dfm$binary <- as.numeric(as.character(samp.dfm$binary))
+ 
+#compute prevalence
+tech.dfm2 <- summaryBy(binary~sequences, data=tech.dfm, id=c("rank", "Phylum", "value"), FUN=sum)
+        dim(tech.dfm2) #should be equal to ntaxa(technical)
+        tech.dfm2$prevalence <- 1+(100*(tech.dfm2$binary.sum/nsamples(technical)))
+        rownames(tech.dfm2) <- tech.dfm2$sequences
+        
+samp.dfm2 <- summaryBy(binary~sequences, data=samp.dfm, id=c("rank", "Phylum", "value"), FUN=sum)
+        dim(samp.dfm2) #should be equal to ntaxa(samples)
+        samp.dfm2$prevalence <- 1+(100*(samp.dfm2$binary.sum/nsamples(samples)))
+        rownames(samp.dfm2) <- samp.dfm2$sequences
+        
+#force the ordering of the two data frame to be the same
+samp.dfm3 = samp.dfm2[rownames(tech.dfm2),]  
+
+df = data.frame(samp.dfm3$binary.sum, tech.dfm2$binary.sum, samp.dfm3$value, tech.dfm2$value, samp.dfm3$rank, tech.dfm2$rank,  samp.dfm3$Phylum, samp.dfm3$sequences)
+df$PoolName <- runs[[i]]
+                
+colnames(df) <- c("sample.prevalence", "control.prevalence", "sample.tax_sums", "control.tax_sums","sample.rank", "control.rank", "Phylum", "Sequence")  
+
+df.holder[[i]] <- df
+}
+
+cont.df <- do.call("rbind", df.holder) 
+colnames(cont.df)[9] <- "run"
+cont.df$subtracted <- cont.df$sample.tax_sums-cont.df$control.tax_sums
+cont.df$number <- 1:nrow(cont.df)
+p1=ggplot(cont.df, aes(sample.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("Samples")
+p2=ggplot(cont.df, aes(control.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("controls")
+p3 = ggplot(cont.df, aes(subtracted)) + geom_histogram()+ scale_x_log10() + ggtitle("subtracted")
+grid.arrange(p1, p2, p3, ncol=3)
+```
+
+```{r}
+px=ggplot(cont.df, aes(sample.rank, subtracted, size=sample.prevalence)) + geom_point()+ scale_y_log10() + theme_bw()
+px
+```
+
+```{r}
+p4=ggplot(cont.df, aes(sample.prevalence)) + geom_histogram() + ggtitle("Samples") + theme_bw()
+p5=ggplot(cont.df, aes(control.prevalence)) + geom_histogram() + ggtitle("controls")+ theme_bw()
+grid.arrange(p4, p5, ncol=2)
+```
+
+```{r, fig.height=8, fig.width=12}
+p6 = ggplot(cont.df, aes(sample.tax_sums, control.tax_sums, size=sample.prevalence/control.prevalence)) + geom_point() + ggtitle("Enriched in Samples") + theme_bw() + scale_y_log10() + scale_x_log10()
+
+p7 = ggplot(cont.df, aes(sample.tax_sums, control.tax_sums, size=control.prevalence/sample.prevalence)) + geom_point() + ggtitle("Enriched in Controls") + theme_bw() + scale_y_log10() + scale_x_log10()
+grid.arrange(p6, p7, ncol=2)
+```
+
+```{r}
+p8=ggplot(cont.df, aes(sample.prevalence, sample.tax_sums)) + geom_point() + ggtitle("Samples") + theme_bw()+ scale_y_log10() 
+p9=ggplot(cont.df, aes(control.prevalence, control.tax_sums)) + geom_point() + ggtitle("controls")+ theme_bw()+ scale_y_log10() 
+grid.arrange(p8, p9, ncol=2)
+
+```
+
+### Generate the dataframe including summary of total sequencing depth per taxon, as well as taxon prevalence and rank - UNFILTERED DATA
+```{r}
+## Generate the dataframe including summary of total sequencing depth per taxon, as well as taxon prevalence and rank
+library(reshape2); library(plyr);library(doBy)
+#get rid of taxa in L0 from the dataset by subsetting on those in G0
+names = taxa_names(G0)
+Filtx = prune_taxa(names, unfiltered)
+
+runs <- levels(sample_data(Filtx)$PoolName)
+df.holder <-vector('list',length(runs))
+for(i in 1:length(runs)){
+        Filt1 = subset_samples(Filtx, PoolName==runs[[i]])               
+        #create  a technical dataset &  calculate technical taxa means
+        technical <- subset_samples(Filt1, Aim =="Technical") #3985 taxa; 461 samples 
+        technical <- prune_taxa(taxa_sums(technical) > 0, technical)
+        technical <- prune_samples(sample_sums(technical) > 0, technical)
+        #create a sample dataest & center on technical taxa means
+        samples <- subset_samples(Filt1, Aim != "Technical") #7953 taxa are present
+        samples <- prune_taxa(taxa_sums(samples) > 0, samples)
+        samples <- prune_samples(sample_sums(samples) > 0, samples)
+
+#### Plot k (prevalence) over A (abundance)
+        
+tech <- data.frame(taxa_sums(technical), rownames(tax_table(technical)),tax_table(technical), t(otu_table(technical)))
+        colnames(tech)[1:2] <- c("taxa_sums", "sequences")
+        #rank order
+        tech <- tech[order(tech$taxa_sums, decreasing=TRUE),]
+        tech$rank <- 1:ntaxa(technical)
+        tech.dfm <- melt(tech, id.var=c("sequences", "rank", 
+        colnames(tax_table(technical))))
+        tech.dfm$binary <- ifelse(tech.dfm$value > 0, "1", "0")
+        tech.dfm$binary <- as.numeric(as.character(tech.dfm$binary))
+        
+samp <- data.frame(taxa_sums(samples), rownames(tax_table(samples)), tax_table(samples), t(otu_table(samples)))
+        colnames(samp)[1:2] <- c("taxa_sums", "sequences")
+        #rank order
+        samp <- samp[order(samp$taxa_sums, decreasing=TRUE),]
+        samp$rank <- 1:ntaxa(samples)
+        samp.dfm <- melt(samp, id.var=c("sequences", "rank", 
+        colnames(tax_table(samples))))
+        samp.dfm$binary <- ifelse(samp.dfm$value > 0, "1", "0")
+        samp.dfm$binary <- as.numeric(as.character(samp.dfm$binary))
+ 
+#compute prevalence
+tech.dfm2 <- summaryBy(binary~sequences, data=tech.dfm, id=c("rank", "Phylum", "value"), FUN=sum)
+        dim(tech.dfm2) #should be equal to ntaxa(technical)
+        tech.dfm2$prevalence <- 1+(100*(tech.dfm2$binary.sum/nsamples(technical)))
+        rownames(tech.dfm2) <- tech.dfm2$sequences
+        
+samp.dfm2 <- summaryBy(binary~sequences, data=samp.dfm, id=c("rank", "Phylum", "value"), FUN=sum)
+        dim(samp.dfm2) #should be equal to ntaxa(samples)
+        samp.dfm2$prevalence <- 1+(100*(samp.dfm2$binary.sum/nsamples(samples)))
+        rownames(samp.dfm2) <- samp.dfm2$sequences
+        
+#force the ordering of the two data frame to be the same
+samp.dfm3 = samp.dfm2[rownames(tech.dfm2),]  
+
+df = data.frame(samp.dfm3$binary.sum, tech.dfm2$binary.sum, samp.dfm3$value, tech.dfm2$value, samp.dfm3$rank, tech.dfm2$rank,  samp.dfm3$Phylum, samp.dfm3$sequences)
+df$PoolName <- runs[[i]]
+                
+colnames(df) <- c("sample.prevalence", "control.prevalence", "sample.tax_sums", "control.tax_sums","sample.rank", "control.rank", "Phylum", "Sequence")  
+
+df.holder[[i]] <- df
+}
+
+g0.df <- do.call("rbind", df.holder) 
+colnames(g0.df)[9] <- "run"
+
+#subset on the taxa that are prevalent in samples but
+good = subset(cont.df, sample.prevalence >0)
+
+g0.df$subtracted <- g0.df$sample.tax_sums-g0.df$control.tax_sums
+g0.df$number <- 1:nrow(g0.df)
+p10=ggplot(g0.df, aes(sample.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("Samples")
+p11=ggplot(g0.df, aes(control.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("controls")
+p12 = ggplot(g0.df, aes(subtracted)) + geom_histogram()+ scale_x_log10() + ggtitle("subtracted")
+```
+
+```{r}
+good = subset(g0.df, sample.prevalence >0) 
+p13=ggplot(good, aes(sample.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("Samples")
+p14=ggplot(good, aes(control.tax_sums)) + geom_histogram()+ scale_x_log10() + ggtitle("controls")
+p15 = ggplot(good, aes(subtracted)) + geom_histogram()+ scale_x_log10() + ggtitle("subtracted")
+grid.arrange(p1, p2, p3, p10, p11, p12, p13, p14, p15, ncol=3)
+```
+
+```{r}
+ggplot(good, aes(sample.prevalence, control.prevalence)) + geom_jitter()  + ggtitle("prevalence") + geom_jitter() + ggtitle("size by sample rank") + scale_y_reverse() + ylab("Prevalence in Controls")  + xlab("Prevalence in Samples") + facet_wrap(~run)
+```
+
+```{r}
+ggplot(good, aes(sample.rank, control.rank))  + ggtitle("rank")   + geom_point()  + xlab("rank abundance in samples") + ylab("rank abundance in controls") + facet_wrap(~Phylum) 
+```
+
+```{r}
+p1 <- ggplot(good, aes(sample.prevalence, sample.tax_sums)) + geom_point()  + ggtitle("k over a for samples")+ scale_y_log10(limits = c(.1, 1e+08)) 
+
+p2 <- ggplot(good, aes(control.prevalence, control.tax_sums)) + geom_point()  +  ggtitle("k over a for controls") + scale_y_log10(limits = c(.1, 1e+08)) 
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+```{r}
+df <- good
+df$odds <- df$control.prevalence/df$sample.prevalence
+df2 <- subset(df, df$control.prevalence & df$sample.prevalence !=0)
+df2$odds.control <- df2$control.prevalence/df2$sample.prevalence
+df2$odds.sample <- df2$sample.prevalence/df2$control.prevalence
+df2$summarized <- df2$sample.tax_sums + df2$control.tax_sums
+
+p1 <- ggplot(df2, aes(odds.control, summarized)) + geom_point() + scale_y_log10() + ggtitle("prevalence in controls / prevalence in samples") + facet_wrap(~Phylum) + xlab("Enrichment in Controls") + ylab("taxa_sum")
+p2 <- ggplot(df2, aes(odds.sample, summarized)) + geom_point() + scale_y_log10() + ggtitle("prevalence in samples / prevalence in controls")+ facet_wrap(~Phylum) + xlab("Enrichment in Samples")+ ylab("taxa_sum")
+grid.arrange(p1, p2, ncol=2)
+```
+
+
+```{r}
+ggplot(df2, aes(odds.sample, odds.control)) + geom_point() + facet_wrap(~Phylum) + xlab("Enrichment in Samples")+ ylab("taxa_sum")
+```
+
+```{r}
+### Decontaminate the dataset by selecting taxa in "good"
+names = as.vector(unique(df2$Sequence))
+decontam.phy = prune_taxa(names, unfiltered)
+        decontam.phy = prune_taxa(taxa_sums(decontam.phy) > 0, decontam.phy)
+        decontam.phy = prune_samples(sample_sums(decontam.phy) >0, decontam.phy)
+        decontam.phy # 1727 taxa and 7441 samples 
+```
+
+```{r}
+library(dada2)
+#sequence table from rdp classifier on rdp database
+tax = tax_table(decontam.phy)
+set.seed(100) # Initialize random number generator for reproducibility
+taxa <- assignTaxonomy(rownames(tax), "~/Dropbox/Taxonomy/rdp_train_set_14.fa.gz", minBoot=80)
+taxaSpecies <- addSpecies(taxa, "~/Dropbox/Taxonomy/rdp_species_assignment_14.fa.gz", verbose=TRUE)
+tax_table(decontam.phy) <- taxaSpecies
+save.image("decontam15_v2.0.Rdata")
+
+
+load("~/Dropbox/decontam15_v.0.Rdata") #this is from the decontamination script
+map = read.csv("~/Dropbox/decontam_phy_quadrant_corrected.csv", row.names=1)
+map = sample_data(map)
+sample_data(decontam.phy) = map
+saveRDS(decontam.phy, file="~/Dropbox/decontam.phy.rds")
+
+```

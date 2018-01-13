@@ -1,0 +1,465 @@
+---
+title: "Supplementary File 5: EMS - metacommunity analysis"
+author: "Diana Proctor"
+date: "November 10, 2017"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+This is the FIFTH script used to generate the main figures for the the manuscript titled "A spatial gradient of bacterial diversity in the human oral cavity shaped by salivary flow" 
+
+
+<WORK> This script and associated data are provided via (c) by Diana M Proctor, Julia A. Fukuyama, Susan P. Holmes, and David A. Relman. These data are licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (CC-BY-CA).
+
+# Let's take a look at coherence
+- we see that the aim 1 samples are on average more coherent than any of the aim3 subjects
+
+From the package authors (?Coherence): This function determines the number of embedded absences in an interaction matrix, and compares this value against null simulated matrices. Species ranges should be coherent along the ordination axis, as this axis represents a latent environmental gradient. A negative value of coherence (empirical matrix has more embedded absences than null matrices) indicates a 'checkerboard' pattern (Leibold & Mikkelson 2002). Nonsignificance has been historically interpreted as being indicative of a 'random' pattern, though this may be seen as accepting the null hypothesis, as nonsignificance cannot be used to infer a process.
+
+The default method argument is 'r1', which maintains the species richness of a site (row totals) and fills species ranges (columns) based on their marginal probabilities.
+
+#output
+A vector containing the number of embedded absences (embAbs), z-score (z), p-value (pval), mean (simulatedMean) and variance (simulatedVariance) of simulations, and null model randomization method (method).
+
+#subset on day 1 samples for aim 1 subjects
+aim1 = subset_samples(supra, Aim=="SA1")
+aim1 = subset_samples(aim1, Day=="1")
+aim1 = prune_taxa(taxa_sums(aim1) > 0, aim1)
+aim1 = prune_samples(sample_sums(aim1) > 0, aim1)
+
+subs = levels(sample_data(aim1)$Subject)
+library(metacom)
+Coherence_Holder <- vector('list', length(subs))
+names(Coherence_Holder)
+
+### Aim 1 subject, 1- did this for 1-101, 1-102, and 1-107
+ s1 = subset_samples(aim1, Subject==subs[[1]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  otus = data.frame(otu_table(s1))
+  otus.pa = decostand(otus, "pa")
+  coh = Coherence(otus.pa, method="r1", sims=1000, scores=1, order=TRUE, allowEmpty = FALSE, binary=TRUE, verbose=TRUE, seed=89)
+  Coherence_Holder[[1]] = coh
+ save.image(file="~/Dropbox/Coherence_holder1.Rdata")
+
+### Compute coherence on the sums across aim 1
+  hab = merge_samples(aim1, "Habitat")
+  hab = prune_taxa(taxa_sums(hab) > 0, hab)
+  hab = prune_samples(sample_sums(hab) > 0, hab)
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  coh = Coherence(otus.pa, method="r1", sims=1000, scores=1, order=TRUE, allowEmpty = FALSE, binary=TRUE, verbose=TRUE, seed=89)
+  Coherence_Holder[[1]] = coh
+ save.image(file="~/Dropbox/a1_coherence2.Rdata")
+
+
+### Compuete coherence on the sums across aim 3
+  hab = merge_samples(aim3, "Habitat")
+  hab = prune_taxa(taxa_sums(hab) > 0, hab)
+  hab = prune_samples(sample_sums(hab) > 0, hab)
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  a3_sum_coh = Coherence(otus.pa, method="r1", sims=1000, scores=1, order=TRUE, allowEmpty = FALSE, binary=TRUE, verbose=TRUE, seed=89)
+ save.image(file="~/Desktop/EMS/a1_coherence2.Rdata")
+
+
+```{r}
+library(ggplot2);library(metacom);library(phyloseq)
+load('~/Desktop/EMS/a1_coherence2.Rdata')
+
+#get the aim 3 sum
+a3_sum = do.call("cbind", a3_sum_coh)
+a3_sum = data.frame(as.matrix(a3_sum))
+a3_sum$Aim = "SA3"
+a3_sum$Subject = "sum"
+
+#get the aim 3 subjects
+load("~/Desktop/EMS/aim3_coherence.Rdata")
+aim3_coh = do.call("rbind", a3_CorrHolder)
+names = rownames(aim3_coh)
+aim3_coh = data.frame(as.matrix(aim3_coh))
+aim3.df = data.frame(matrix(unlist(aim3_coh), nrow=10, byrow = FALSE))
+colnames(aim3.df)= c("embAbs", "z", "pval", "simulatedMean", "simulatedVariance", "method")
+aim3.df$Aim = "SA3"
+aim3.df$Subject = names
+
+#combine
+aim3.df2 = rbind(aim3.df, a3_sum)
+aim3.df2 = data.frame(aim3.df2)
+
+#get the aim 1 data from the summed subjects
+load('~/Desktop/EMS/a1_coherence2.Rdata')
+aim1_coh = do.call("cbind", a1_sum_coh)
+aim1_coh = data.frame(as.matrix(aim1_coh))
+aim1.df = data.frame(matrix(unlist(aim1_coh), nrow=1, byrow = TRUE))
+colnames(aim1.df)= c("embAbs", "z", "pval", "simulatedMean", "simulatedVariance", "method")
+aim1.df$Aim = "SA1"
+aim1.df$Subject = "sums"
+
+#read in the subject specific coherence estimages
+t=readRDS(file="~/Desktop/EMS/aim1_CorrHolder_first_three.RDS")
+t1 = do.call("rbind", t)
+t1 = data.frame(matrix(unlist(t1), nrow=2, byrow = TRUE))
+colnames(t1)= c("embAbs", "z", "pval", "simulatedMean", "simulatedVariance", "method")
+t1$Aim = "SA1"
+t1$Subject = c("1-101", "1-102")
+
+load('~/Desktop/EMS/Coherence_holder.Rdata')
+t2 = do.call("cbind", Coherence_Holder)
+t2 = data.frame(matrix(unlist(t2), nrow=1, byrow = FALSE))
+colnames(t2)= c("embAbs", "z", "pval", "simulatedMean", "simulatedVariance", "method")
+t2$Aim = "SA1"
+t2$Subject = "1-107"
+
+
+#combine
+coh.df = data.frame(rbind(aim1.df, t1, t2))
+coherence.df = data.frame(rbind(coh.df, aim3.df))
+coherence.df$embAbs = as.numeric(as.character(coherence.df$embAbs))
+coherence.df$simulatedMean = as.numeric(as.character(coherence.df$simulatedMean))
+coherence.df$Aim = ifelse(coherence.df$Aim=="SA1", "Control", "Sjogren's")
+
+#plot the coherence estimates
+p1=ggplot(coherence.df, aes(Aim, embAbs,fill=Aim)) + theme_bw() +geom_violin() + ggtitle(("a)"))  + geom_point() + guides(fill=guide_legend(title="Health Status")) + xlab("Health Status") + ylab("Number of embedded absences")
+p1
+
+p4=ggplot(coherence.df, aes(simulatedMean, embAbs,color=Aim)) + theme_bw()  +ggtitle(("d)"))  + geom_point()+ guides(color=guide_legend(title="Health Status")) + xlab("Mean number of embedded absences by random chance") + ylab("Number of observed embedded absences")
+p4
+print(coherence.df)
+```
+
+# Look at turnover
+- we see that the observed turnover is correlated with the simulated mean turnover
+- we also see that turnover is reduced (both simulated mean and the observed turnover) in the SS compared to healthy controls
+- notably, one healthy control (1-107) has a turnover rating that is comparable to the aim 3 subject; will want to see if this subject has a lower relative salivary flow rate or what other similarity this subject may have with the SS group
+
+
+###from the package author
+ If the 'community' perspective is desired, simply transpose the matrix before analysis using the transpose function ('t()'), but make sure you understand the implications of this action, as the interpretation of the output changes dramatically.
+
+'method' is an argument handed to functions in the 'vegan' package. Leibold & Mikkelson advocated the use of equiprobable rows and columns (provided that rows and columns had at least one entry). This method is called 'r00'. Methods maintaining row (site) frequencies include 'r0','r1' & 'r2'. The default method argument is 'r1', which maintains the species richness of a site (row totals) and fills species ranges (columns) based on their marginal probabilities. Arguably the most conservative null algorithm is the fixed row - fixed column total null, which is implemented as 'fixedfixed'. See the help file for 'commsimulator' or Wright et al. 1998 for more information.
+
+If 'order' is FALSE, the interaction matrix is not ordinated, allowing the user to order the matrix based on site characteristics or other biologically relevant characteristics.
+
+This function can either be used as a standalone, or can be used through the 'metacommunity()' function, which determines all 3 elements of metacommunity structure (coherence, boundary clumping, & turnover) (Leibold & Mikkelson 2002). The turnover metric used here is equivalent to the number of checkerboard units community with species ranges (range perspective) filled in
+
+*Value*
+A data.frame containing the test statistic (turnover), z-value (z), p-value (pval), mean (simulatedMean) and variance (simulatedVariance) of simulations, and randomization method (method) 
+
+
+aim1 = subset_samples(supra, Aim=="SA1")
+aim1 = prune_taxa(taxa_sums(aim1) > 0, aim1)
+aim1 = prune_samples(sample_sums(aim1) > 0, aim1)
+subs = levels(sample_data(aim1)$Subject)
+
+a1_Turnover <- vector('list', length(subs))
+names(a1_Turnover) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim1, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  hab = merge_samples(s1, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a1_Turnover[[i]] = turn.out
+  
+}
+a1_Turnover
+
+###Aim 3
+aim3 = subset_samples(supra, Aim=="SA3")
+aim3 = prune_taxa(taxa_sums(aim3) > 0, aim3)
+aim3 = prune_samples(sample_sums(aim3) > 0, aim3)
+subs = levels(sample_data(aim3)$Subject)
+
+a3_Turnover<- vector('list', length(subs))
+names(a3_Turnover) = subs
+for(i in 1:length(subs)){
+  s3 = subset_samples(aim3, Subject==subs[[i]])
+  s3 = prune_taxa(taxa_sums(s3) > 0, s3)
+  s3 = prune_samples(sample_sums(s3) > 0, s3)
+  hab = merge_samples(s3, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a3_Turnover[[i]] <- turn.out
+  
+}
+a3_Turnover
+
+##### Buccal
+aim1_buccal = subset_samples(aim1, Tooth_Aspect=="Buccal")
+aim1_buccal = prune_taxa(taxa_sums(aim1_buccal) > 0, aim1_buccal)
+aim1_buccal = prune_samples(sample_sums(aim1_buccal) > 0, aim1_buccal)
+subs = levels(sample_data(aim1_buccal)$Subject)
+
+a1_buccal_Turnover <- vector('list', length(subs))
+names(a1_buccal_Turnover) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim1, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  hab = merge_samples(s1, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a1_buccal_Turnover[[i]] = turn.out
+  
+}
+a1_buccal_Turnover
+
+###Aim 3
+aim3_buccal = subset_samples(aim3, Tooth_Aspect=="Buccal")
+aim3_buccal = prune_taxa(taxa_sums(aim3_buccal) > 0, aim3_buccal)
+aim3_buccal = prune_samples(sample_sums(aim3_buccal) > 0, aim3_buccal)
+subs = levels(sample_data(aim3_buccal)$Subject)
+
+a3_buccal_Turnover <- vector('list', length(subs))
+names(a3_buccal_Turnover) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim3, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  hab = merge_samples(s1, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a3_buccal_Turnover[[i]] = turn.out
+}
+a3_buccal_Turnover
+
+
+##### lingual
+aim1_lingual = subset_samples(aim1, Tooth_Aspect=="Lingual")
+aim1_lingual = prune_taxa(taxa_sums(aim1_lingual) > 0, aim1_lingual)
+aim1_lingual = prune_samples(sample_sums(aim1_lingual) > 0, aim1_lingual)
+subs = levels(sample_data(aim1_lingual)$Subject)
+
+a1_lingual_Turnover <- vector('list', length(subs))
+names(a1_lingual_Turnover) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim1, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  hab = merge_samples(s1, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a1_lingual_Turnover[[i]] = turn.out
+  
+}
+a1_lingual_Turnover
+
+###Aim 3
+aim3_lingual = subset_samples(aim3, Tooth_Aspect=="Lingual")
+aim3_lingual = prune_taxa(taxa_sums(aim3_lingual) > 0, aim3_lingual)
+aim3_lingual = prune_samples(sample_sums(aim3_lingual) > 0, aim3_lingual)
+subs = levels(sample_data(aim3_lingual)$Subject)
+
+a3_lingual_Turnover <- vector('list', length(subs))
+names(a3_lingual_Turnover) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim3, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  hab = merge_samples(s1, "Habitat")
+  otus = data.frame(otu_table(hab))
+  otus.pa = decostand(otus, "pa")
+  turn.out = Turnover(otus.pa, method = "r1", sims = 1000, scores = 1, order = TRUE, allowEmpty = FALSE, binary = TRUE, verbose = FALSE)
+  a3_lingual_Turnover[[i]] = turn.out
+}
+a3_lingual_Turnover
+
+save.image("turnover_v3.1.Rdata")
+
+
+```{r}
+load("~/Desktop/EMS/turnover_v3.1.Rdata")
+
+library(phyloseq);library(reshape2);library(stringr)
+#get all the aim 1 turnover stats into a single data.frame - lingual
+a1turn.df = df <- data.frame(do.call("rbind", a1_Turnover))
+a1turn.df$diff= a1turn.df$turnover-a1turn.df$simulatedMean
+a1turn.df$Subject = rownames(a1turn.df)
+a1turn.df$Aim = "SA1"
+
+#get all the aim 3 turnover stats into a single data frame = Buccal
+a3turn.df = df <- data.frame(do.call("rbind", a3_Turnover))
+a3turn.df$diff= a3turn.df$turnover-a3turn.df$simulatedMean
+a3turn.df$Subject = rownames(a3turn.df)
+a3turn.df$Aim = "SA3"
+
+
+#combine the aim1 and aim 3 turnover stats
+turnover.df = rbind(a1turn.df, a3turn.df)
+turnover.df$Aim = ifelse(turnover.df$Aim=="SA1", "Control", "Sjogren's")
+
+#plot the turnover stats
+ggplot(turnover.df, aes(simulatedMean, turnover, color=Aim)) + geom_point()
+
+
+#which aim 1 subject has turnover like aim 3?
+p2 = ggplot(turnover.df, aes(Aim, turnover,fill=Aim)) + theme_bw() +geom_violin() +ggtitle(("b)"))  + geom_point()+ guides(fill=guide_legend(title="Health Status"))+ xlab("Health Status") + ylab("Species turnover across sites")
+p2
+
+p5 = ggplot(turnover.df, aes(simulatedMean, turnover,color=Aim)) + theme_bw()  +ggtitle(("e)"))  + geom_point()+ guides(color=guide_legend(title="Health Status")) + xlab("Mean turnover based on a random model") + ylab("Observed species turnover across teeth")
+
+```
+
+### Let's look at boundary clumping
+- we see that the index exceeds 1 for all subjects, so there's more clumping than would be expected by chance along
+- we can see that the aim 1 subject boundary clumping stats are more uniform - they're generally lower
+- on the other hand, each aim 3 subject seems to have its  clumping stat, ranging from a low of less than 2 and a high of greater than 4
+- whereas the bulk of the aim 3 subjects have stats that are less than 2
+
+###from the package developer
+This  statistic  is  not  based  on  randomization  methods,  so  the  function  only  requires  a  presence-absence interaction matrix and two arguments regarding the ordination of the empirical matrix.
+
+
+The default is the range perspective, meaning that the analyses of boundary clumping and species
+turnover compare the distribution of species among sites. If the ’community’ perspective is desired,
+transpose the matrix before analysis using the transpose function (’t()’).  However, the author cau-
+tions against misinterpretation of the community perspective, as the biological meaning of turnover
+and boundary clumping differ between perspectives.
+
+Boundary clumping, quantified by the Morisita’s index, is a measure of the degree to which species
+range boundaries overlap.   This measure,  and species turnover,  cannot be interpreted unless the
+network is significantly coherent (see ’Coherence()’).
+
+If ’order’ is FALSE, the interaction matrix is not ordinated, allowing the user to order the matrix
+based on site characteristics or other biologically relevant characteristics.
+
+’BoundaryClump’  returns  a  data  frame  containing  the  calculated  Morisita’s  index  (’index’),  the corresponding p-value (’P’), and the degrees of freedom (’df’).
+The  p-value  is  based  on  a  chi-squared  test  comparing  the  Morisita’s  index  to  a  value  of  1.   If the  Morisita’s  index  is  less  than  1,  a  left-tailed  test  is  performed  (less  clumping  than  expected by chance). If the Morisita’s index is greater than 1, a right-tailed test is performed (more clumping han expected
+by chance)
+
+#### Calculate Boundary clumping
+'BoundaryClump' calculates the Morisita's Index (Morisita 1962) for presence-absence interaction matrices, using a chi-squared test to assess significance.
+
+This statistic is not based on randomization methods, so the function only requires a presence-absence interaction matrix and two arguments regarding the ordination of the empirical matrix.
+
+The default is the range perspective, meaning that the analyses of boundary clumping and species boundary compare the distribution of species among sites. If the 'community' perspective is desired, transpose the matrix before analysis using the transpose function ('t()'). However, the author cautions against misinterpretation of the community perspective, as the biological meaning of boundary and boundary clumping differ between perspectives.
+
+Boundary clumping, quantified by the Morisita's index, is a measure of the degree to which species range boundaries overlap. This measure, and species boundary, cannot be interpreted unless the network is significantly coherent (see 'Coherence()').
+
+If 'order' is FALSE, the interaction matrix is not ordinated, allowing the user to order the matrix based on site characteristics or other biologically relevant characteristics.
+
+#Output
+'BoundaryClump' returns a data frame containing the calculated Morisita's index ('index'), the corresponding p-value ('P'), and the degrees of freedom ('df').
+
+The p-value is based on a chi-squared test comparing the Morisita's index to a value of 1. If the Morisita's index is less than 1, a left-tailed test is performed (less clumping than expected by chance).
+
+If the Morisita's index is greater than 1, a right-tailed test is performed (more clumping han expected by chance)
+
+##### clumping 
+aim1 = subset_samples(supra, Aim=="SA1")
+aim1 = subset_samples(aim1, Day=="1")
+subs = levels(sample_data(aim1)$Subject)
+
+a1_boundary <- vector('list', length(subs))
+names(a1_boundary) = subs
+
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim1, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  otus = data.frame(otu_table(s1))
+  otus.pa = decostand(otus, "pa")
+  boucl.pa = BoundaryClump(otus.pa, order = TRUE, scores = 1, binary = TRUE, fill = TRUE)
+  a1_boundary[[i]] = boucl.pa
+  
+}
+a1_boundary
+
+###Aim 3
+aim3 = subset_samples(supra, Aim=="SA3")
+aim3 = prune_taxa(taxa_sums(aim3) > 0, aim3)
+aim3 = prune_samples(sample_sums(aim3) > 0, aim3)
+subs = levels(sample_data(aim3)$Subject)
+
+a3_boundary <- vector('list', length(subs))
+names(a3_boundary) = subs
+for(i in 1:length(subs)){
+  s1 = subset_samples(aim3, Subject==subs[[i]])
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  otus = data.frame(otu_table(s1))
+  otus.pa = decostand(otus, "pa")
+  boucl.pa = BoundaryClump(otus.pa, order = TRUE, scores = 1, binary = TRUE, fill = TRUE)
+  a3_boundary[[i]] = boucl.pa
+}
+a3_boundary
+save.image("~/Desktop/EMS/clumping_v4.0.Rdata")
+
+
+```{r}
+load("~/Desktop/EMS/clumping_v4.0.Rdata")
+#deal with aim 1
+a1 = do.call("rbind", a1_boundary)
+a1$Subject = rownames(a1)
+a1$Aim = "SA1"
+
+
+#deal with aim 3
+a3 = do.call("rbind", a3_boundary)
+a3$Subject = rownames(a3)
+a3$Aim = "SA3"
+
+
+#combind
+boundary.df = rbind(a1, a3)
+boundary.df$Aim = ifelse(boundary.df$Aim=="SA1", "Control", "Sjogren's")
+
+#let's take a look at the boundary clumping stats
+p3=ggplot(boundary.df, aes(Aim, index, fill=Aim)) + geom_violin() + theme_bw()+ geom_jitter() + ggtitle(("c)"))+ guides(fill=guide_legend(title="Health Status"))+ xlab("Health Status") + ylab("Morista's Index (i.e., Boundary Clumping)")
+p3
+```
+
+
+### Since these factors seem to depend on the size of the matrix, get the size of the samples and the size of taxa for each data.frame
+
+- note that the two control samples that have fewer taxa and samples belong to the pilot (p1-8, and p1-9)
+```{r}
+#what is the size of the data.table for each data matrix
+subs = levels(as.factor(sample_data(supra)$Subject))[1:17]
+size_Holder <- vector('list', length(subs))
+names(size_Holder) = subs
+site_holder <- vector('list', length(subs))
+for(i in 1:length(subs)){
+  s1 = subset_samples(supra, Subject==subs[[i]])
+  s1 = subset_samples(s1, Day=="1")
+  s1 = prune_taxa(taxa_sums(s1) > 0, s1)
+  s1 = prune_samples(sample_sums(s1) > 0, s1)
+  df = data.frame(nsamples(s1), ntaxa(s1), subs[[i]])
+  size_Holder[[i]] = df
+  s1 = merge_samples(s1, "Habitat")
+  fm = data.frame(tax_table(s1))$Highest.Rank
+  taxa_names(s1) = fm
+  otus = data.frame(otu_table(s1))
+  otus.pa = decostand(otus, "pa")
+  foo = data.frame(colSums(otus.pa))
+  foo$Subject = subs[[i]]
+  foo$nsites = length(levels(as.factor(sample_data(s1)$Habitat)))
+  colnames(foo) = c("N.sites", "Subject", "Total")
+  site_holder[[i]] = foo
+}
+
+df1 = do.call("rbind", site_holder)
+df1$percent = 100*(df1$N.sites/df1$Total)
+foo = colsplit(df1$Subject, "-", c("Aim", "Junk"))
+foo$Aim = ifelse(foo$Aim==1, "Control", "SS")
+df1$Aim = foo$Aim
+ggplot(df1, aes(percent)) + geom_histogram() + facet_wrap(~Aim)
+
+```
+
+
+###Make a single plot with coherence, turnover and clumping in one plot
+```{r, fig.width=12, fig.height=10}
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, p5, ncol=3)
+
+ggsave(grid.arrange(p1, p2, p3, p4, p5, ncol=3), file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS14.png",  width = 11, height = 8.5, units ="in",dpi = 300)
+```

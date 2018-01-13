@@ -1,0 +1,769 @@
+---
+title: "Supplementary Figures & Presentation of Discovery dataset"
+author: "Diana Proctor"
+date: "December 16, 2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Nature Communications Supplementary Data File 2 - 
+
+This is the SECOND script used to generate the main figures for the the manuscript by Proctor et al. titled "A spatial gradient of bacterial diversity in the human oral cavity shaped by salivary flow" 
+
+
+<WORK> This script and associated data are provided via (c) by Diana M Proctor, Julia A. Fukuyama, Susan P. Holmes, David A. Relman. These data and the associated script are licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (CC-BY-CA).
+
+Given attribution, you are free to:
+1) Share, copy and redistribute the material in any medium or format
+2) Adapt, remix, transform, and build upon the material for any purpose, even commercially.
+
+To see the full license associated with attribution of this work, see the CC-By-CA license,  see <http://creativecommons.org/licenses/by-sa/4.0/>.
+
+
+### Import the data from the "Main Figures" script
+Run the "Main Figures" script first. Then run this one. Most of the supplemental figures are in two accompanying files, one for beta diversity, and the one to generate the other supplemental figures in the manuscript. The local name of this file on my desktop is: NatureComm_SupplementalFigures.Rmd.
+
+
+```{r}
+library("phyloseq");library("ggplot2");library(gridExtra);library("stringr");library("reshape2");library("genefilter"); library(knitr);library(DESeq2)
+setwd("~/Desktop/Proctor_NatureComm/")
+load("~/Desktop/Proctor_NatureComm/Proctor_MainFigures_v28.0.Rdata")
+```
+
+
+###Map of the samples by site and subject
+```{r, fig.height=8, fig.width=12}
+df <- data.frame(sample_data(supra))
+teeth <- 3:30
+days <- 1:30
+df$Tooth <- factor(df$Tooth_Number, as.character(teeth))
+df$Day <- factor(df$Day, as.character(days))
+
+p=ggplot(df, aes(Tooth, Day, color=Tooth_Class, shape=Tooth_Aspect)) + geom_point() + facet_wrap(~Subject) + theme_bw() + theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+ scale_x_discrete(breaks = seq(from=0, to=35, by=5), labels=seq(from=0, to=35, by=5))  + scale_y_discrete(breaks = seq(from=0, to=35, by=5), labels=seq(from=0, to=35, by=5)) 
+
+p
+```
+
+
+#### Supplemental Figure 1:  PCoA alternative axes
+```{r}
+#hellinger transform the data
+otus = data.frame(otu_table(index25))     
+library(vegan)
+otus.h = decostand(otus, "hellinger")  
+
+#Do PCOA
+#nmds on bray curtis distance of hellinger transformation
+h.euc = vegdist(otus.h, "bray")
+h.nmds = cmdscale(h.euc, eig=TRUE, k=10)
+h.map = data.frame(sample_data(index25), scores(h.nmds))
+h.map$method = "Hellinger"
+h.eig = 100*(h.nmds$eig/sum(h.nmds$eig))
+head(h.eig)
+
+#make a screeplot
+evals <- h.nmds$eig
+foo = data.frame(h.eig, as.numeric(1:length(h.eig)))
+colnames(foo) = c("percent.variation", "rank")
+p=ggplot(foo[1:10,], aes(rank, percent.variation)) + geom_point() + theme_bw()
+p
+
+#
+varEX = 100*(evals/sum(evals))
+head(varEX)
+```
+
+##### 1b. Supplementary Figure S1: NMDS - lookat like we may want to look at the first 4 axes
+- we see that the only axis that gives rise to a horsehow structure is axis 4; along axis 1 there is segregation of most molar and incisor samples
+
+```{r, fig.height=8, fig.width=12}
+nmds.df = data.frame(scores(h.nmds)[,1:4], sample_data(index25))
+############Color by tooth class 
+#axis 1 vs. 2, 3, 4 - color plots by tooth class
+p1 = ggplot(nmds.df, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(evals[2] / evals[1])) + xlab("Dim 1 (23.5%)")+ ylab("Dim 2 (10.9%)") + ggtitle("a)")
+
+
+p2 = ggplot(nmds.df, aes(Dim1, Dim3, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point()+ theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+coord_fixed(sqrt(evals[3] / evals[1]))+ xlab("Dim 1 (23.5%)")+ ylab("Dim 3 (9.7%)") + ggtitle("b)")
+
+
+p3 = ggplot(nmds.df, aes(Dim1, Dim4, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point()+ theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+coord_fixed(sqrt(evals[4] / evals[1])) + xlab("Dim 1 (23.5%)")+ ylab("Dim 4 (8.0%)")+ ggtitle("c)")
+
+#axis 2 vs. 3, 4
+p4 = ggplot(nmds.df, aes(Dim2, Dim3, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point()+ theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+coord_fixed(sqrt(evals[2] / evals[3])) + xlab("Dim 2 (10.9%)")+ ylab("Dim 3 (9.7%)")+ ggtitle("d)")
+
+p5 = ggplot(nmds.df, aes(Dim2, Dim4, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point()+ theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+ xlab("Dim 2 (10.9%)")+ ylab("Dim 2 (8%)")+coord_fixed(sqrt(evals[2] / evals[4]))+ ggtitle("e)")
+
+#axis 3 vs. 4
+p6 = ggplot(nmds.df, aes(Dim3, Dim4, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point()+ theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=8), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1))+coord_fixed(sqrt(evals[3] / evals[4]))+ xlab("Dim 3 (9.7%)")+ ylab("Dim 4 (8%)")+ ggtitle("f)")
+
+grid.arrange(p1, p2, p3,p4, p5, p6, ncol=3)
+
+#ggsave(grid.arrange(p1, p2, p3, p4, p5, p6, ncol=2), file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS1.pdf",  width = 11, height = 8.5, units ="in",dpi = 300)  
+```
+
+
+#### Supplemental Figure 2: Robust to a variety of transformations
+### Set up several otu tables with different transformations
+```{r, fig.width=12, fig.height=9}
+### Create an index tooth biogeography subset
+index <- subset_samples(supra, Protocol=="Home")
+sites <- c("Molar", "Incisor_Central")
+index_subsites <- subset_samples(index, Tooth_Class %in% sites)
+index_subsites
+        
+#how many samples are in average 2 subjects? Looks like about 25% of samples
+mean(table(sample_data(index_subsites)$Subject))
+
+#filter the taxa to include those present in 25% of samples
+filtergroup = filterfun(kOverA(k=850, A=1)) #k = number of samples; A = abundance
+        index25 = filter_taxa(index_subsites, filtergroup, prune=TRUE) 
+        index25 = prune_samples(sample_sums(index25) > 0, index25) 
+
+        #note the following command drops 7 samples (depth between 1-35)
+        index25 = prune_samples(sample_sums(index25) > 800, index25) 
+        index25
+
+#VST transform the index25 dataset
+        
+#Stabilize the variance with a transformation
+Index25_VST <- index25
+#add 1 to OTU counts
+otu_table(Index25_VST) <- otu_table(Index25_VST) + 1
+#create deseq object
+Index25.ds = phyloseq_to_deseq2(Index25_VST, ~Tooth_Class)
+#regularlized log transformation
+Index25.VST <- varianceStabilizingTransformation(Index25.ds, blind=TRUE, fitType = "local") 
+counts_full_VST <- otu_table(as.matrix(assay(Index25.VST)), taxa_are_rows=TRUE)
+#exchange otu tables
+otu_table(Index25_VST) <- counts_full_VST 
+
+#convert all the data to relative abundance        
+indexRA = transform_sample_counts(index25, function(x) x / sum(x))
+
+#####################get the otu tables
+library(vegan)
+#raw data
+otus = data.frame(otu_table(index25))
+
+#vst-transformed data
+otus.VST = data.frame(t(otu_table(Index25_VST)))
+
+#Relvative abundance-transformed data
+otus.RA = transform_sample_counts(index25, function(x) x / sum(x))
+otus.ra = as.matrix(otu_table(otus.RA))
+
+#hellinger transform
+otus.h = as.matrix(decostand(otus, "hellinger"))
+
+#chi-square
+otus.chi = decostand(otus, "chi.square")
+
+# Orlóci's Chord distance: range 0 .. sqrt(2)
+otus.c = vegdist(decostand(otus, "norm"), "euclidean")
+```
+
+### plot the standard deviation as a function of the mean after various transformations
+
+```{r}
+library(vsn)
+#raw data
+raw= meanSdPlot(as.matrix(otus), rank=FALSE) 
+p1= raw$gg + theme_bw()+ ggtitle("Raw")
+
+#vst data
+vst=meanSdPlot(as.matrix(otus.VST), rank=FALSE) 
+p2 = vst$gg + theme_bw()+ ggtitle("VST")
+
+#hellinger
+hel = meanSdPlot(as.matrix(otus.h), rank=FALSE)
+p3 = hel$gg + theme_bw()+ ggtitle("Hellinger")
+
+#chi-squared
+chi=meanSdPlot(as.matrix(otus.chi), rank=FALSE)  
+p4 = chi$gg + theme_bw()+ ggtitle("Chi-Square")
+
+#chord
+chor= meanSdPlot(as.matrix(otus.c), rank=FALSE) 
+p5 = chor$gg + theme_bw()+ ggtitle("Chord")
+
+````
+
+### Plot the sd over mean 
+```{r, fig.height=8, fig.width=12}
+grid.arrange(p1, p2, p3, p4, p5, ncol=3)
+```
+
+#### Supplementary figure S2: nmds on euclidean distance following the different transformations
+```{r, fig.width=12, fig.height=9}
+library(stringr)
+sample_data(index25)$Tooth_Class = str_replace_all(sample_data(index25)$Tooth_Class, "Incisor_Central", "Incisor")
+#nmds on euclidean distance of hellinger transformation
+h.euc = vegdist(otus.h, "euclidean")
+h.nmds = cmdscale(h.euc, eig=TRUE, k=10)
+h.map = data.frame(sample_data(index25), scores(h.nmds))
+h.map$method = "Hellinger"
+h.eig = 100*(h.nmds$eig/sum(h.nmds$eig))
+h.eval = h.nmds$eig
+head(h.eig)
+
+#plot the samples
+p1 = ggplot(h.map, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(h.eval[2] / h.eval[1])) + xlab("Dim 1 (21.2%)")+ ylab("Dim 2 (11.1%)") + ggtitle("a)")
+
+
+#nmds on euclidean distance of chord transformation
+c.euc = vegdist(otus.c, "euclidean")
+c.nmds = cmdscale(c.euc, eig=TRUE, k=10)
+c.map = data.frame(sample_data(index25), scores(c.nmds))
+c.map$method = "Chord"
+c.eig = 100*(c.nmds$eig/sum(c.nmds$eig))
+c.eval = c.nmds$eig
+head(c.eig)
+
+#plot the samples
+p2 = ggplot(c.map, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(c.eval[2] / c.eval[1])) + xlab("Dim 1 (57.4%)")+ ylab("Dim 2 (20.4%)") + ggtitle("b)")
+
+
+#nmds on vst-transformed species profiles
+vst.euc = vegdist(otus.VST, "euclidean")
+vst.nmds = cmdscale(vst.euc, eig=TRUE, k=10)
+vst.map = data.frame(sample_data(index25), scores(vst.nmds))
+vst.map$method = "VST"
+vst.eig = 100*(vst.nmds$eig/sum(vst.nmds$eig))
+vst.eval = vst.nmds$eig
+head(vst.eig)
+
+#plot the samples
+p3 = ggplot(vst.map, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(vst.eval[2] / vst.eval[1])) + xlab("Dim 1 (17.3%)")+ ylab("Dim 2 (10.4%)") + ggtitle("c)")
+
+
+#nmds on bray curtis after vst-transforming species profiles
+#replace values < 0 with 0
+otus.VST[otus.VST < 1] <- 0
+bray.euc = vegdist(otus.VST, "bray")
+bray.nmds = cmdscale(bray.euc, eig=TRUE, k=10)
+bray.map = data.frame(sample_data(index25), scores(bray.nmds))
+bray.map$method = "vst_bray"
+bray.eig = 100*(bray.nmds$eig/sum(bray.nmds$eig))
+bray.eval = bray.nmds$eig
+head(bray.eig)
+
+
+#plot the samples
+p4 = ggplot(bray.map, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(vst.eval[2] / vst.eval[1])) + xlab("Dim 1 (25.3%)")+ ylab("Dim 2 (11.1%)") + ggtitle("d)")
+
+RA.bray = vegdist(otus.ra, "euclidean")
+RA.nmds = cmdscale(RA.bray, eig=TRUE, k=10)
+RA.map = data.frame(sample_data(index25), scores(RA.nmds))
+RA.map$method = "RA_Bray"
+RA.eig = 100*(RA.nmds$eig/sum(RA.nmds$eig))
+RA.eval = RA.nmds$eig
+head(RA.eig)
+
+#plot the samples
+p5 = ggplot(RA.map, aes(Dim1, Dim2, color=Tooth_Class)) + facet_wrap(~Tooth_Aspect) + geom_point() + theme_bw() + guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=12), axis.text.x = element_text(angle=0, vjust=1))+theme(text = element_text(size=12), axis.text.x = element_text(angle=00, vjust=1)) +coord_fixed(sqrt(RA.eval[2] / RA.eval[1])) + xlab("Dim 1 (28.3%)")+ ylab("Dim 2 (21.9%)") + ggtitle("e)")
+
+
+grid.arrange(p1, p2, p3, p4, p5, ncol=2)
+#ggsave(grid.arrange(p1, p2, p3, p4, p5, ncol=2), file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS2.png",  width = 8.5, height = 11, units ="in",dpi = 300)
+
+```
+
+
+#plot the samples
+df = data.frame(rbind(RA.map, h.map, c.map, vst.map, bray.map))
+df$Tooth_Class = str_replace_all(df$Tooth_Class, "Incisor_Central", "Incisor")
+buccal = subset(df, Tooth_Aspect=="Buccal")
+lingual = subset(df, Tooth_Aspect=="Lingual")
+p1=ggplot(buccal, aes(Dim1, Dim2, color=Tooth_Class)) + geom_point() + facet_wrap(~method, scales="free", ncol=5) + theme_bw() + ggtitle("a) Buccal") + guides(colour=guide_legend(title="Tooth Class"))
+p2 = ggplot(lingual, aes(Dim1, Dim2, color=Tooth_Class)) + geom_point() + facet_wrap(~method, ncol=5,scales="free") + theme_bw() + ggtitle("b) Lingual") + guides(colour=guide_legend(title="Tooth Class")) 
+
+#### Supplemental Figure 3: Separation of molars/incisors is robust to a variety of distance metrics 
+
+```{r, fig.width=12, fig.height=6, warning=FALSE}
+library(vegan)
+###do relative abundance transformation and see if  the patterns are the same
+indexRA  = transform_sample_counts(index25, function(x) x / sum(x) )
+#replace the otu table with hellinger transformed data
+otus = data.frame(otu_table(index25))
+outs.h = decostand(otus, "hellinger")
+otu_table(index25) = otu_table(outs.h, taxa_are_rows=FALSE)
+
+#make a list of nmds objects
+dist_methods_deco =  c("binomial", "bray", "canberra", "euclidean", "gower", "jaccard", "kulczynski", "manhattan")
+
+nmds_ideco.list <- vector("list", length(dist_methods_deco))
+plot_ideco.list <- vector("list", length(dist_methods_deco))     
+
+for(i in 1:length(dist_methods_deco)){
+        iDist <- vegan::vegdist(outs.h, method=dist_methods_deco[i])
+        iMDS <- ordinate(index25, method="PCoA", distance=iDist, correction="lingoes")
+        p <- plot_ordination(index25, iMDS, color="Tooth_Class") + facet_wrap(Jaw_Quadrant~Tooth_Aspect)
+        ps <- p$data
+        ps$Distance <- dist_methods_deco[[i]]
+        plot_ideco.list[[i]] <- ps
+        nmds_ideco.list[[i]] <- iMDS
+}
+plot_ideco <- do.call("rbind", plot_ideco.list) 
+plot_ideco$Tooth_Class = str_replace_all(plot_ideco$Tooth_Class, "Incisor_Central", "Incisor")
+p=ggplot(plot_ideco, aes(Axis.2, Axis.1, color=Tooth_Class)) + facet_wrap(Tooth_Aspect~Distance, ncol=8, scales="free") + geom_point() + theme_bw()+ guides(color=guide_legend(title="Tooth Class"))+ theme(text = element_text(size=10), axis.text.x = element_text(angle=00, vjust=1)) + xlab("Axis 2") + ylab("Axis 1")
+
+#ggsave(p, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS3.png",  width = 12, height = 8.5, units ="in",dpi = 300)
+
+p
+```
+
+#### Separation of molars/incisors is also seen on the discovery dataset, sequenced to a different depth on a different platform
+
+```{r, fig.width=12, fig.height=6, warning=FALSE}
+library(vegan)
+### apply a 10% filter
+filtergroup = filterfun(kOverA(k=190, A=1)) #k = number of samples; A = abundance
+        index = subset_samples(discovery, Class %in% c("CentralIncisor", "Molar"))
+        index = filter_taxa(index, filtergroup, prune=TRUE) 
+        index = prune_samples(sample_sums(index) > 0, index) 
+
+        #note the following command drops 56 samples 
+        index = prune_samples(sample_sums(index) > 200, index)
+
+###do relative abundance transformation and see if  the patterns are the same
+indexRA  = transform_sample_counts(index, function(x) x / sum(x) )
+
+#make a list of nmds objects
+dist_methods_deco =  c("binomial", "bray", "canberra", "euclidean", "gower", "jaccard", "kulczynski", "manhattan")
+
+
+nmds_ideco.list <- vector("list", length(dist_methods_deco))
+plot_ideco.list <- vector("list", length(dist_methods_deco))     
+totus <- t(otu_table(indexRA))
+
+for(i in 1:length(dist_methods_deco)){
+        iDist <- vegan::vegdist(totus, method=dist_methods_deco[i])
+        iMDS <- ordinate(indexRA, method="PCoA", distance=iDist, correction="lingoes")
+        p <- plot_ordination(indexRA, iMDS, color="Class") + facet_wrap(Quadrant~Aspect)
+        ps <- p$data
+        ps$Distance <- dist_methods_deco[[i]]
+        plot_ideco.list[[i]] <- ps
+        nmds_ideco.list[[i]] <- iMDS
+}
+plot_ideco <- do.call("rbind", plot_ideco.list) 
+p=ggplot(plot_ideco, aes(Axis.1, Axis.2, color=Class)) + facet_wrap(Aspect~Distance, ncol=8, scales="free") + geom_point() + theme_bw()+ guides(color=guide_legend(title="Tooth Class"))
+
+p
+```
+
+###we also want to know whether the raw data showed differences in sequencing depth by tooth class
+```{r, fig.height=8, fig.width=12}
+df = data.frame(sample_sums(supra), sample_data(supra))
+colnames(df)[1] = "sums"
+
+df1 = subset(df, Tooth_Class %in% c("Molar", "Incisor_Central"))
+
+#do incisors and molars differ by tooth class on buccal aspect
+df1b = subset(df1, Tooth_Aspect=="Buccal")
+wilcox.test(sums~Tooth_Class, data=df1b, exact=TRUE, conf.int=TRUE)
+
+#what about lingual
+df1b = subset(df1, Tooth_Aspect=="Lingual")
+wilcox.test(sums~Tooth_Class, data=df1b, exact=TRUE, conf.int=TRUE)
+```
+
+
+### Supplementary Figure 4: Communities don't experience a directional change in composition over time
+- Use multiple-tables approach where one table is defined for each day
+```{r, fig.height=8, fig.width=12}
+library(ade4)
+#force the labeling of the subjects
+ordering= c("Subject 1", "Subject 2",  "Subject 3" , "Subject 4" , "Subject 5" ,"Subject 6", "Subject 7" ,"Subject 8")
+sample_data(index25)$Subject  <- factor(sample_data(index25)$Subject, levels = ordering)
+
+#rename the index dataset
+statis_vst <- Index25_VST
+
+ProjHolder <-vector('list',length(subs)) 
+CorrHolder <- vector('list', length(subs))
+
+#set up a loop to do the statis for each individual separarelty
+subs = levels(sample_data(statis_vst)$Subject)
+
+for(i in 1:length(subs)){
+  #subset on the subject
+  subx = subset_samples(statis_vst, Subject==subs[[i]])
+  subx = prune_samples(sample_sums(subx) > 0, subx)
+  
+  #do the statis and save projections into df
+  m = matrix(otu_table(subx), ncol = nsamples(subx))
+  m = t(m)
+  dim(m)
+  m = data.frame(m)
+  kta1 = ktab.within(withinpca(m, sample_data(subx)$Day, scann = FALSE))
+  statis1 = statis(kta1, scann = FALSE)
+  statisProjs = statis1$C.Co[as.character(1:nsamples(subx)),]
+  statisProjs = data.frame(sample_data(subx), statisProjs)
+  ProjHolder[[i]] = statisProjs
+  
+  #look at the RV coefficient
+  RVs <- data.frame(statis1$RV)
+  RVs$rows <- rownames(RVs)
+  rv.dfm <- melt(RVs, id.var="rows")
+  colnames(rv.dfm) <- c("D1", "D2", "RV")
+  d1 <- as.integer(str_replace_all(rv.dfm$D1, "X", ""))
+  d2 <- as.integer(str_replace_all(rv.dfm$D2, "X", ""))
+  interval <- abs(d1-d2)
+  rv.dfm$interval <- interval
+  rv.dfm <- subset(rv.dfm, interval !=0)
+  rv.dfm$RV <- as.numeric(rv.dfm$RV)
+  rv.dfm$Subject = subs[[i]]
+  CorrHolder[[i]] = rv.dfm
+  
+}
+rvdf <- data.frame(do.call("rbind", CorrHolder)) 
+projDf <-data.frame(do.call("rbind", ProjHolder)) 
+
+  
+### Plot the RV coefficients
+library(ggpmisc)
+my.formula<- y ~ x
+p1=ggplot(rvdf, aes(interval, RV)) + facet_wrap(~Subject, ncol=4) + theme_bw() + xlab("Time Interval between Sample Collection Days")  + stat_poly_eq(formula = my.formula, aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), parse = TRUE)  + geom_point() + ylim(0, 1)+ geom_smooth(method="lm") + ylab("RV Coefficient")
+
+
+#plot points
+ordering= 1:32
+projDf$Day  <- factor(projDf$Day, levels = ordering)
+
+p2 <- ggplot(projDf, aes(as.numeric(Day), C1, color = Tooth_Class)) +  geom_smooth(method="glm") + geom_point()+facet_wrap(~ Habitat) + theme_bw() + ggtitle("C1 Scores by Site Over Time") + xlab("Day") + stat_poly_eq(formula = my.formula, aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), parse = TRUE) 
+
+
+plot(p1)
+plot(p2)
+
+
+
+#save supplementary figure S4
+#ggsave(p1, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS4.png",  width = 7, height = 7, units ="in",dpi = 300, device="png")   
+```
+
+### Supplemental Figure 5: Lesser abundant taxa drive the gradient
+- the gradient becomes increasingly apparent as additional taxa are added
+
+```{r, fig.height=8, fig.width=12}
+#generate multiple plots based on the top most abundant taxa
+library(ggcorrplot)
+
+thresh = c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+holder <-vector('list',length(thresh)) 
+
+otus = data.frame(otu_table(FullMouth))
+otus.h = decostand(otus, "hellinger")
+otu_table(FullMouth) = otu_table(otus.h, taxa_are_rows=FALSE)
+
+for(i in 1:length(thresh)){ 
+
+  sub = names(sort(taxa_sums(FullMouth), TRUE)[1:thresh[i]]) 
+  sub1   <- prune_taxa(sub, FullMouth)
+  
+  map <- sample_data(FullMouth)
+  coo <- cbind(map$x, map$y)
+  colnames(coo) <- c("x", "y")
+
+  ### Perform  PCA-IV with respect to a 3rd order polynomial of geographic coordinates
+  poly.xy3 <- poly(coo, degree = 3, raw=FALSE) #, coefs=TRUE) 
+  colnames(poly.xy3) <- c("X", "X^2", "X^3", "Y", "XY", "X^2Y", "Y^2", "XY^2", "Y^3")
+  poly.xy3.df <- data.frame(poly.xy3, map$x, map$y)
+
+  library(ade4)
+  totus <- data.frame(otu_table(sub1))
+  rld.pca <- dudi.pca(totus, center=TRUE, scale=TRUE, scannf=FALSE, nf=10)
+  rld.xy3 <- pcaiv(rld.pca, poly.xy3, scannf = FALSE, nf = 6)
+  rld.xy3.df <- data.frame(rld.xy3$ls, map)
+  xy3.df <- data.frame(rld.xy3.df, poly.xy3)
+  
+  # how much of the variance does this model explain?
+  rld.xy3.var <- sum(rld.xy3$eig)/sum(rld.pca$eig)*100
+  rld.xy3.var
+  
+  # get the eigen values
+  pca.scree <- data.frame(rank = 1:length(rld.xy3$eig))
+  Explainedvariance = rld.xy3$eig/sum(rld.xy3$eig)*100
+  Explainedvariance
+
+  #force x, y to numeric
+  xy3.df$x <- as.numeric(as.character(xy3.df$x))
+  xy3.df$y <- as.numeric(as.character(xy3.df$y))
+  
+  #add the treshold
+  xy3.df$Threshold = thresh[i]
+  
+  holder[[i]] = xy3.df
+  
+}
+
+df <- data.frame(do.call("rbind", holder)) 
+ordering= 1:32
+df$Tooth_Number  <- factor(df$Tooth_Number, levels = ordering)
+df$Tooth_Class = str_replace_all(df$Tooth_Class, "Incisor_Central", "Central Incisor")
+df$Tooth_Class = str_replace_all(df$Tooth_Class, "Incisor_Lateral", "Lateral Incisor")
+df$Tooth_Class = str_replace_all(df$Tooth_Class, "Molar_Pre", "Pre-molar")
+p=ggplot(df, aes(Tooth_Number, Axis1, fill=Tooth_Class)) + geom_boxplot() + facet_wrap(~Threshold, ncol=5) + theme_bw()+ scale_x_discrete(breaks = seq(from=0, to=30, by=5), labels=seq(from=0, to=30, by=5)) + xlab("Tooth Number")+ theme_bw() + guides(fill=guide_legend(title="Tooth Class")) + ylab("Axis 1")
+p
+#ggsave(p, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS5.png",  width = 11, height = 8.5, units ="in",dpi = 300, device = "png")  
+```
+
+##### Supplemental Figure 6 - Moran's coefficients on taxa distributions
+
+```{r, fig.width=10, fig.height=8, warning=FALSE}
+library(spdep);library(plyr)
+#take the mean value of each taxon at each site; in effect, average across sub1jects
+hab <- merge_samples(sub2, group="Habitat")
+sample_data(hab)$Habitat <- factor(sample_names(hab))
+
+#make a new mapping file for plotting
+foo <- data.frame(sample_names(hab))
+colnames(foo)[1] = "Habitat"
+map = read.csv("~/Desktop/Proctor_NatureComm/mytoothdot_coordinates_FullMouth.csv")
+colnames(map)[1] = "Habitat"
+map = join(foo, map, by="Habitat")
+rownames(map) = map$Habitat
+sample_data(hab)=map
+coo = data.frame(map$x, map$y)
+
+#Compute the Inverse Euclidean Distance between samples
+EucMat <- as.matrix(dist(coo, method="euclidean", diag=TRUE, upper=FALSE))
+EucInv <- 1/EucMat
+diag(EucInv) <- 0
+#convert the square matrix into a listw object using mat2listw
+Euc.invw <- mat2listw(EucInv, row.names=NULL, style="M")
+# set the seed
+set.seed(1234)
+# compute Moran.I using the Euclidean Distance Metric
+smotus <- data.frame(otu_table(hab))
+Euc.mct <- sapply(smotus, moran.test, Euc.invw, randomisation=TRUE, 
+                  alternative="greater", rank=TRUE, na.action=na.omit, simplify=FALSE, USE.NAMES=TRUE)
+
+# unlist the Moran.I test and combine with the taxonomy table
+Euc.mct1 <- data.frame(matrix(unlist(Euc.mct), nrow=ntaxa(hab), byrow=T), tax_table(hab))
+colnames(Euc.mct1)[1:6] <- c("Moran.I.SD", "p.value", "Moran.I", "Expectation", "Variance","Alternative")
+
+### For the values to numeric so they can later be plotted
+Euc.mct1$p.value <- as.numeric(levels(Euc.mct1$p.value))[Euc.mct1$p.value]
+Euc.mct1$Moran.I <- as.numeric(levels(Euc.mct1$Moran.I))[Euc.mct1$Moran.I]
+
+### Construct confidence intervals around Moran's I
+Euc.mct1$lower = Euc.mct1$Moran.I - as.numeric(Euc.mct1$Moran.I.SD)
+Euc.mct1$upper = Euc.mct1$Moran.I + as.numeric(Euc.mct1$Moran.I.SD)
+
+##plot moran's I as a function of p-value
+Euc.mct1$Sig = ifelse(Euc.mct1$p.value < 0.05, "Significant", "Not Significant")
+p1= ggplot(Euc.mct1, aes(Highest.Rank, Moran.I, color=Sig)) + geom_point() + theme_bw()+ theme(text = element_text(size=12), axis.text.x = element_text(angle=90, vjust=1)) + xlab("Taxon") + scale_color_discrete(name="Significance\nLevel") + ylab("Moran's I (Correlation Coefficient)")
+p1
+
+#save figure S6
+#ggsave(p1, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS6.png",  width = 10, height = 8, units ="in",dpi = 300, device = "png")
+```
+
+### Supplemental Figure 7: Other axes; significant polynomial terms
+- this is in the quickPCNM script
+
+### Supplemental Figure 8: PCNM
+- this is in the quickPCNM script
+
+### Supplemental Figure 9: MEM
+- this is in the quickPCNM script
+
+### Supplemental Figure 10: shedding and non-shedding surfaces are distinct habitats
+
+```{r, fig.height=8, fig.width=12}
+#convert to RA for pcoa
+otus= data.frame(otu_table(Biogeo2_phys15))
+otus.h = decostand(otus, "hellinger")
+h.euc = vegdist(otus.h, "euclidean")
+
+#make supplementary figure s6
+h.nmds = cmdscale(h.euc, eig=TRUE, k=10)
+h.map = data.frame(sample_data(Biogeo2_phys15), scores(h.nmds))
+h.eig = 100*(h.nmds$eig/sum(h.nmds$eig))
+head(h.eig)
+
+evals <- h.nmds$eig
+h.map$Subject = str_replace_all(h.map$Subject, "(4-101)", "Subject 1")
+h.map$Subject = str_replace_all(h.map$Subject, "(4-102)", "Subject 2")
+h.map$Subject = str_replace_all(h.map$Subject, "(4-103)", "Subject 3")
+
+#Make supplemental figure 9
+FigS9a = ggplot(h.map, aes(Dim1, Dim2, color=TissueClass)) + facet_wrap(~Subject) + theme_bw() + geom_point(alpha=0.8) + guides(color=guide_legend(title="Tissue type"))+coord_fixed(sqrt(evals[2] / evals[1])) + xlab("Axis 1 (35.9%)") + ylab("Axis 2 (16.9%)") + ggtitle("a) Tissue type")
+
+FigS9b = ggplot(h.map, aes(Dim1, Dim2, color=Site.New)) + facet_wrap(~Subject) + theme_bw() + geom_point(alpha=0.8) + guides(color=guide_legend(title="Body site habitat") )+coord_fixed(sqrt(evals[2] / evals[1]))+ xlab("Axis 1 (35.9%)") + ylab("Axis 2 (16.9%)") + ggtitle("b) Body site habitat")
+grid.arrange(FigS9a, FigS9b, ncol=1)
+FigS9 = arrangeGrob(FigS9a, FigS9b, ncol=1)
+
+#ggsave(FigS9, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/Figure10.png",  width = 7, height = 7, units ="in",dpi = 300, device="png")     
+```
+
+#### Supplemental figure 10; Forward selection mucosal biogeography
+- this is in the main script
+
+
+#### Supplemental figure 12; what is the distribution of caries in each mouth
+#### 5.2. Bring in the clinical data - in this section, we bring in caries 
+- note that we examined the occlusal surfaces as well, but those data are not represented here since we only sampled the buccal and lingual surfaces of teeth
+- We see that in general the caries experience of SS subjects is widespread whereas for the control subjects it's limited to the molars and incisors
+- Important to note that these data only represent the smooth surfaces!!
+
+```{r, fig.width=12, fig.height=6, warning=FALSE}
+library(doBy)
+#read in the caries data and then subset on the redcap ids that are included in the dataset
+data = read.csv("~/Desktop/Proctor_NatureComm/data_caries_combined_v1.2_20170328.csv")
+colnames(data)[3] = "redcap_record_num"
+data1 = subset(data, redcap_record_num %in% redcap.id)
+
+#subset on buccal and lingual (excluding the occlusal surfaces as well as the mesial- and distal- sites) and get rid of wisdom teeth
+bl = subset(data1, surface %in% c("B", "L"))
+nowise = c(2:15, 18:31)
+bl = subset(bl, tooth %in% nowise)
+
+#convert disease to 1, sound to 0
+bl$binary = ifelse(bl$description =="SOUND", 0, 1)
+
+#count the number of decayed missing teeth per subject
+bl.sum = summaryBy(binary~redcap_record_num, data=bl, FUN=sum)
+bl.sum$prop = bl.sum/28
+colnames(bl)[3]= "redcap_record_num"
+colnames(bl)[8]= "Tooth_Number"
+colnames(bl)[9]= "Tooth_Aspect"
+bl$Tooth_Aspect = str_replace_all(bl$Tooth_Aspect, "([B,L])", replacement =c("Buccal", "Lingual"))
+bl = bl[,3:11]
+
+
+#join the caries data with the microbial data
+total3 = join(flow.map2, bl, b=c("redcap_record_num", "Tooth_Number", "Tooth_Aspect"))
+total3$x <- as.numeric(as.character(total3$x))
+total3$y <- as.numeric(as.character(total3$y))
+rownames(total3) = total3[,1]
+total3 = sample_data(total3)
+
+# relabel the subjects so they will correspond to the way they are labeled in figure 5
+#relabel controls that have symetrical gradients
+total3$Subject = str_replace_all(total3$Subject, "1-101", "Control 01")
+total3$Subject = str_replace_all(total3$Subject, "1-103", "Control 02") 
+total3$Subject = str_replace_all(total3$Subject, "1-104", "Control 03") 
+total3$Subject = str_replace_all(total3$Subject, "1-106", "Control 04") 
+total3$Subject = str_replace_all(total3$Subject, "1-107", "Control 05") 
+
+#relabel the controls that have flat maxillary lines
+total3$Subject = str_replace_all(total3$Subject, "1-102", "Control 06")
+total3$Subject = str_replace_all(total3$Subject, "1-105", "Control 07") 
+
+
+#relabels sjogrens that have symetrical curves
+total3$Subject = str_replace_all(total3$Subject, "3-305", "Sjogrens 01") 
+total3$Subject = str_replace_all(total3$Subject, "3-302", "Sjogrens 02") 
+total3$Subject = str_replace_all(total3$Subject, "3-306", "Sjogrens 03") 
+
+
+#relabel sjogren's that have flat lines
+total3$Subject = str_replace_all(total3$Subject, "3-304", "Sjogrens 04") 
+total3$Subject = str_replace_all(total3$Subject, "3-308", "Sjogrens 05") 
+total3$Subject = str_replace_all(total3$Subject, "3-310", "Sjogrens 06") 
+total3$Subject = str_replace_all(total3$Subject, "3-309", "Sjogrens 07") 
+
+
+total3$Subject = str_replace_all(total3$Subject, "3-303", "Sjogrens 08") 
+total3$Subject = str_replace_all(total3$Subject, "3-307", "Sjogrens 09") 
+
+#relabel sjogrens that have exaggerated  lines
+
+total3$Subject = str_replace_all(total3$Subject, "3-301", "Sjogrens 10") 
+total3$Tooth_Class = str_replace_all(total3$Tooth_Class, "Incisor_Central", "Central Incisor")
+total3$Tooth_Class = str_replace_all(total3$Tooth_Class, "Incisor_Lateral", "Lateral Incisor")
+total3$Tooth_Class = str_replace_all(total3$Tooth_Class, "Molar_Pre", "Pre-molar")
+
+p=ggplot(total3, aes(x, y, size=as.factor(binary), color=Tooth_Class)) + geom_point() + facet_wrap(~Subject, ncol=5) + theme_bw()+ guides(colour=guide_legend(title="Tooth Class"))
+p
+ggsave(p, file="~/Dropbox/FigureS12.eps",  width = 10, height = 8.5, units ="in",dpi = 300, device="eps") 
+
+
+#why does aim 1 have any of the smooth surface caries? are these actually restorations, or are they fluoride treatments?
+sa1 = subset(total3, Aim=="SA1")
+
+p=ggplot(sa1, aes(x, y, size=binary, color=Tooth_Class)) + geom_point() + facet_wrap(~Subject) + theme_bw() 
+p # we see that this is in two subject, 1104 and 1105
+#take a look at those sites in those subjects
+s1 = subset(sa1, Subject %in% c("Control 03", "Control 07"))
+
+p=ggplot(s1, aes(x, y, size=binary, color=Tooth_Class, label=description)) + geom_point() + facet_wrap(~Subject) + theme_bw() + geom_text()
+p # we see that this is in two subject, 1104 and 1105 and that these subjects have amalgams and composites on these sites
+```
+
+#### Supplemental figure  13: what taxa segregate across CCA axis 1 scores
+
+```{r, fig.height=8, fig.width=12}
+#how many samples and subjects are there?
+flow 
+levels(sample_data(flow)$Subject) #7 controls; 10 aim 3
+
+#get ridof subjects with missing flow rate for the cca
+flows = subset_samples(flow, UWS_FR & SWS_FR != "NA")
+levels(sample_data(flows)$Subject) #7 controls; lost subject 3-310 because of sws-fr
+
+
+#subset on taxa present in 10% of samples
+filtergroup = filterfun(kOverA(k=75, A=1)) #k = number of samples; A = abundance
+        flows = filter_taxa(flows, filtergroup, prune=TRUE) 
+        flows = prune_taxa(taxa_sums(flows) > 0, flows)
+        flows = prune_samples(sample_sums(flows) > 0, flows)
+        flows
+        
+#stabilize the variance
+flows_VST = flows
+otu_table(flows_VST) <- otu_table(flows_VST) + 1
+flows.ds = phyloseq_to_deseq2(flows_VST, ~PoolName)
+
+#variance stabilizing transformation
+flows_vst <- varianceStabilizingTransformation(flows.ds , blind=FALSE, fitType="local") 
+counts_VST <- otu_table(as.matrix(assay(flows_vst)), taxa_are_rows=TRUE)
+otu_table(flows_VST) <- counts_VST 
+
+#set an analysis up for CCA
+otus = t(otu_table(flows_VST))
+map1 = data.frame(sample_data(flows_VST)$Tooth_Class, sample_data(flows_VST)$UWS_FR, sample_data(flows_VST)$SWS_FR, sample_data(flows_VST)$binary)
+colnames(map1) = c("Class", "uws_fr", "sws_fr", "dmfs")
+map1$Class = as.numeric(map1$Class)
+subs = as.vector(sample_data(flows_VST)$Subject)
+runs = as.vector(sample_data(flows_VST)$Pool_Name)
+
+#for some reason this wworks on the command line but not in knitr
+attach(map1)
+flow.cca = vegan::cca(otus ~ map1$Class*map1$uws_fr*map1$sws_fr*map1$dmfs, sitenv=map1)
+
+#run an anova on this
+set.seed(100)
+flow.aov = anova.cca(flow.cca, by="term", strata=subs)
+flow.aov
+
+
+## get the species scores and plot them
+sp.cca = data.frame(as.matrix(flow.cca$CCA$v))
+
+species = data.frame(taxa_sums(flows_VST), sp.cca, tax_table(flows_VST), otu_table(flows_VST))
+colnames(species)[1] = "sums"
+species$tax = paste0(species$Genus, "_", species$Species)
+species$tax = str_replace_all(species$tax, "_NA", " sp.")
+species$seq = rownames(species)
+sp.df = melt(species, id.var=c("tax", "sums", "seq", colnames(tax_table(flows_VST)), colnames(sp.cca))) 
+
+#subset on taxa with high or low scores along CCA1
+df2 = subset(sp.df, CCA1 < -1 | CCA1 > 1)
+df2 = subset(df2, Genus !="NA")
+
+
+p7 = ggplot(df2, aes(Genus, CCA1, color=Genus, label=Highest.Rank)) + geom_text(size=3, angle=45)  + theme_bw() +theme(legend.position = "none")+ theme(text = element_text(size=12), axis.text.x = element_text(angle=90, vjust=1))+ ylab("CCA1 (59.74%)")
+
+#ggsave(p7, file="~/Dropbox/Figures_20170617/Revised/FinalFigures/FigureS13.png",  width = 11, height = 8.5, units ="in",dpi = 300, device="png")
+p7
+```
+ 
+ 
+### Save the workspace
+```{r}
+save.image(file="Proctor_SuppFigures_v20.0.Rdata")
+```
